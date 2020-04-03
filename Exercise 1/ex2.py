@@ -15,15 +15,18 @@ def ex_solution():
     M = 100
 
     fig, axs = plt.subplots(4, 2)
+    fig.tight_layout(pad=3.0)
 
     print('\nExercise 2')
 
     for index, (p, q) in enumerate(PQ_PAIRS):
         func = lambda x: discrete_bass_model(x, p, q)
 
-        y_hat = predict_val(None, 0, M*p, func, list_return=True)
+        y_hat = predict_val(None, 0, M*p, func, for_range=range(1, 30), list_return=True)
 
         y = 1 if index >= 4 else 0
         axs[index%4, y].plot(y_hat)
+        axs[index%4, y].set_ylim([0, 12])
+        axs[index%4, y].set_title(f"P: {p}, Q: {q}")
 
     plt.show()

@@ -24,7 +24,8 @@ def ex_solution():
     generate_a_list(df)
 
     fig, axs = plt.subplots(nrows=len(PQ_PAIRS)//2, ncols=2)
-    
+    fig.tight_layout(pad=3.0)
+
     print('\nExercise 4')
 
     for index, (p, q) in enumerate(PQ_PAIRS):

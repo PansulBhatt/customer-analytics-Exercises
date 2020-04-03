@@ -21,7 +21,7 @@ def ex_1_a_solution(df):
     pred_14 = lm.predict([X.iloc[len(X)-1].values])[0]
     print('Prediction for N(14): ', pred_14)
     print(f"p: {p}, q: {q}, M: {M}")
-    print('Prediction for N(30)', predict_val(lm, X.iloc[-1]['A(t)'], pred_14))
+    print('Prediction for N(30): ', predict_val(lm, X.iloc[-1]['A(t)'], pred_14))
 
 
 def ex_1_b_solution(df, curve_fn=discrete_bass_model, x_param='A(t)'):
@@ -79,7 +79,7 @@ def ex_solution():
     df = read_from_file('adoptionseries2_with_noise.xlsx')
     generate_a_list(df)
 
-    print('\nExercise 1.4')
+    print('\nExercise 1.1')
     ex_1_a_solution(df)
     print('\nExercise 1.2')
     ex_1_b_solution(df)

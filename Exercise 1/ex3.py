@@ -45,6 +45,7 @@ def ex_solution():
     Solution to exercise 3
     """
     fig, axs = plt.subplots(2, 2)
+    fig.tight_layout(pad=3.0)
 
 
     print('\nExercise 3')    
