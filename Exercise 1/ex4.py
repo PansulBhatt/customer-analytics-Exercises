@@ -8,7 +8,7 @@ def discrete_computation(df, p, q):
     y = df['N(t)']
 
     func = lambda x: discrete_bass_model(x, p, q)
-    y_hat = predict_val(None, X.iloc[-1], y.iloc[-1], func, list_return=True)
+    y_hat = predict_val(None, 0, 100*q, func, range(0, 30), list_return=True)
     return y_hat
 
 def continuous_computation(df, p, q):
@@ -37,5 +37,6 @@ def ex_solution():
         axs[index%4, y].plot(d)
         axs[index%4, y].plot(c)
         axs[index%4, y].set_title(f"With P: {p} and Q: {q}")
+        
 
     plt.show()

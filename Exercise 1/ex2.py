@@ -27,6 +27,6 @@ def ex_solution():
         y = 1 if index >= 4 else 0
         axs[index%4, y].plot(y_hat)
         axs[index%4, y].set_ylim([0, 12])
-        axs[index%4, y].set_title(f"P: {p}, Q: {q}")
+        axs[index%4, y].set_title(f"(Fig: {index+1}) P: {p}, Q: {q}")
 
     plt.show()
