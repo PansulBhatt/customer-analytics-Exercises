@@ -8,16 +8,22 @@ def ex_1_a_solution(df):
     Function to estimate the "M", "p" and "q" from the adoption series dataset
     using the linear regression approach
     """
+    # Instantiate linear regression model
     lm = LinearRegression()
 
+    # Set the independent and dependent variables
     y = df['N(t)']
     X = df[['A(t)', 'A(t) Squared']]
 
+    # Train the model and fetch the coefficients
     model = lm.fit(X, y)
     a = model.intercept_
     b, c = model.coef_
 
+    # Compute p, q and M, for bass model
     p, q, M = compute_coeff(a, b, c)
+
+    # Perform predictions
     pred_14 = lm.predict([X.iloc[len(X)-1].values])[0]
     print('Prediction for N(14): ', pred_14)
     print(f"p: {p}, q: {q}, M: {M}")
@@ -32,9 +38,11 @@ def ex_1_b_solution(df, curve_fn=discrete_bass_model, x_param='A(t)'):
     This function can also be used as a baseline to fix the popt values
     for your models
     """
+    # Set the independent and dependent variables
     X = df[x_param]
     y = df['N(t)']
 
+    # Compute the coefficients in the non-linear function
     popt, pcov = curve_fit(curve_fn, X, y)
     print('Coefficients: ', popt)
     return popt
@@ -44,11 +52,17 @@ def ex_1_c_solution(df):
     Function to predict values from the adoption series dataset
     using the non linear regression approach while holding M = 100.
     """
+    # Set the independent and dependent variables
     X = df['A(t)']
     y = df['N(t)']
 
+    # Fetch the coefficients
     p, q = ex_1_b_solution(df)
+
+    # Setup the discrete bass model function with M = 100
     func = lambda x: discrete_bass_model(x, p, q)
+
+    # Fetch predictions
     y_30 = predict_val(None, X.iloc[-1], y.iloc[-1], func)
     print('N(30): ', y_30)
 
@@ -58,11 +72,13 @@ def ex_1_d_solution(df):
     using the non linear regression approach while holding M = 100
     while using the continuous bass model.
     """
+    # Set the independent and dependent variables
     X = df['t']
     y = df['N(t)']
 
     p_initial = [0.001, 0.1]
 
+    # Setup the continuous bass model function with M = 100
     popt, pcov = curve_fit(continuous_bass_model, X, y, p0=p_initial)
     print('Coefficients: ', popt)
 

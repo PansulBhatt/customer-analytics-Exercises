@@ -8,9 +8,11 @@ def read_from_file(file_name):
     """
     Function to read file excel files
     """
+    # Base condition
     if not file_name:
         return
 
+    # Read excel file and return the response
     df = pd.read_excel('{0}{1}'.format(DATA_DIR, file_name))
     return df
 
@@ -19,8 +21,10 @@ def generate_a_list(df):
     Function to update the df. Since df is going to be passed by reference
     we can make the updates directly to df and don't need to return anything else.
     """
+    # Initialize the required values
     a_t = [0]
 
+    # Iterate through all the rows
     for index, row in df.iterrows():
         if index == len(df) - 1:
             continue
@@ -28,6 +32,7 @@ def generate_a_list(df):
         val = row['N(t)'] + a_t[-1]
         a_t.append(val)
     
+    # Update the DF
     df['A(t)'] = a_t
     df['A(t) Squared'] = df['A(t)'].apply(lambda x: x**2)
 
@@ -67,7 +72,6 @@ def predict_val(lm, a_t: int, n_t: int, predict_fn=None, for_range=range(14, 30)
     """
     if a_t is None or n_t is None:
         return
-    result = {}
 
     n_list = [n_t]
 
