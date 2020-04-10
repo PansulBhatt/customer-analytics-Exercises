@@ -1,4 +1,4 @@
-import asyncio
+import time
 import numpy as np
 import pandas as pd
 import collections
@@ -150,53 +150,99 @@ def optimizer(products):
     for product in products:
         # print(product.cost)
         obj.utility_of_product(product)
+
     obj.compute_probability()
     market_shares = obj.compute_average_probability()
 
-    for share, product in zip(market_shares, products):
-        print(share, product.cost, share*product.cost)
+    # for share, product in zip(market_shares, products):
+    #     print(share, product.cost, share*product.cost)
 
-    return compute_expected_profit(market_shares, products)
-
-
-async def fast_optimizer(products):
-    obj = ProductOptimizer()
-
-    for product in products:
-        # print(product.cost)
-        obj.utility_of_product(product)
-    obj.compute_probability()
-    market_shares = obj.compute_average_probability()
+    return {
+        'expected_profit': compute_expected_profit(market_shares, products),
+        'market_share': market_shares[-1]
+    }
 
 
-    return compute_expected_profit(market_shares, products)
+from multiprocessing import Pool
+from functools import partial
+
+def multi_process_handle(products, row):
+    _, record = row
+    prod = Product(record.values, 2, True)
+    task = optimizer(products + [prod])
+    
+    return task
 
 
-def main_1():
-    products = load_products()
-    optimizer(products)
-
-import time
-
-async def get_all_product_shares():
+def fast_get_all_product_shares():
     products = load_products()
     products.pop()
 
     products_df = load_products_from_csv()
     record_results = []
+    p = Pool(5)
+    
+    func = partial(multi_process_handle, products)
+    record_results=p.map(
+        func,
+        products_df.iterrows()
+        )
+    
+    products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
+    products_df['Market Shares'] = [r.get('market_share') for r in record_results]
+    
+    print(products_df.head())
+    return products_df
+
+
+def get_all_product_shares():
+    products = load_products()
+    products.pop()
+
+    products_df = load_products_from_csv()
+    record_results = []
+
     for _, record in products_df.iterrows():
         print('Iteration: ', _)
         prod = Product(record.values, 2, True)
-        task = asyncio.create_task(fast_optimizer(products + [prod]))
-        await task
-        record_results.append(task.result)
+        task = optimizer(products + [prod])
+
+        record_results.append(task)
     
-    products_df['Expected Profit / customer'] = record_results
+    products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
+    products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     
     print(products_df.head())
-    
-def main_2():
-    time1 = time.time()
-    asyncio.run(get_all_product_shares())
-    time2 = time.time()
-    print(time2 - time1)
+    return products_df
+
+def main_1():
+    products = load_products()
+    print(optimizer(products))
+
+import matplotlib.pyplot as plt 
+import seaborn as sns
+
+def scatter_text(x, y, text_column, data):
+    # Create the scatter plot
+    p1 = sns.scatterplot(x, y, data=data, size = 8, legend=False, hue='Cn')
+    # Add text besides each point
+    for line, _ in data.iterrows():
+         p1.text(data[x][line], data[y][line]+0.03, 
+                 str(line), va='top', ha='center',
+                 size='small', color='gray')
+
+    return p1
+
+def main_2(fast=False):
+    # time1 = time.time()
+    if fast:
+        r1 = fast_get_all_product_shares()
+        scatter_text(x="Market Shares", y="Expected Profit / customer",\
+            text_column="index", data=r1)
+        plt.show()
+
+    else:
+        get_all_product_shares()
+
+    # time2 = time.time()
+    # print(time2 - time1)
