@@ -7,6 +7,9 @@ from utils import read_from_file, generate_a_list, predict_val, compute_coeff
 
 np.random.seed(1729)
 
+def update_numpy_set(*args):
+    return (np.around(args, decimals=4))
+
 def generate_predictions(original_df, add_noise=0):
     lm = LinearRegression()
 
@@ -23,20 +26,23 @@ def generate_predictions(original_df, add_noise=0):
     b, c = model.coef_
 
     p, q, M = compute_coeff(a, b, c)
-
-    return (predict_val(lm, 0, M*p, for_range=range(1, 30), list_return=True))
+    return (predict_val(lm, 0, M*p, for_range=range(1, 30), list_return=True)), update_numpy_set(p, q, M)
 
 def create_plot_from_dataset(file_name, sub_plot, randomize=0.1):
     df = read_from_file(file_name)
     generate_a_list(df)
 
-    y_hat = generate_predictions(df)
+    y_hat, (p1, q1, M1) = generate_predictions(df)
     sub_plot.plot(y_hat)
 
-    y_hat = generate_predictions(df, randomize)
+    y_hat, (p2, q2, M2) = generate_predictions(df, randomize)
     sub_plot.plot(y_hat)
 
-    sub_plot.set_title(f"From {file_name} with randomization: {randomize}")
+    sub_plot.set_title(f"From {file_name} with randomization: {randomize}\n\
+        p1:{p1}, p2:{p2},  \
+        q1:{q1}, q2:{q2}\n\
+        M1:{M1}, M2:{M2}\
+        ")
 
 
 

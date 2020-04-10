@@ -27,6 +27,7 @@ def ex_1_a_solution(df):
     pred_14 = lm.predict([X.iloc[len(X)-1].values])[0]
     print('Prediction for N(14): ', pred_14)
     print(f"p: {p}, q: {q}, M: {M}")
+    func = lambda x: a + x*b + (x**2)*c
     print('Prediction for N(30): ', predict_val(lm, X.iloc[-1]['A(t)'], pred_14))
 
 
