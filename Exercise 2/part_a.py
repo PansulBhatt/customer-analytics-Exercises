@@ -1,25 +1,14 @@
 import time
+import random
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt 
+import seaborn as sns
 import collections
-from collections import namedtuple
-"""
-Price: $30, $10, $5
-Time Insulated: 0.5 hrs, 1 hrs, 3 hrs
-Capacity: 12 oz, 20 oz, 32 oz
-Cleanability: Difficult (7 min), Fair (5 min), Easy (2 min)
-Containment: Slosh resistant, Spill resistant, Leak resistant
-Brand: A, B, C
-"""
-# [
-#     {
-#         'Price': 30,
-#         'Insulation': 3,
-#         'Capacity': 20,
-#         'Cleanability': 'ClE',
-#         Leak Resistant, Brand A
-#     }
-# ]
+from multiprocessing import Pool
+from functools import partial
+from collections import namedtuple, Counter
+from utils import timer
 
 pricing = {
     'In': {'0.5': 0.5, '1': 1, '3': 3},
@@ -44,6 +33,7 @@ product_map_list = ['Pr', 'In', 'Cp', 'Cl', 'Cn', 'Br']
 MyProduct = namedtuple('MyProduct', product_map_list)
 
 C=0.0139
+cutoff = 2.5
 
 class Product():
     def __init__(self, data, index, primary=False):
@@ -63,6 +53,19 @@ class Product():
 
     def get_param(self, attr):
         return self.product_info.get(attr, None)
+
+    
+    def is_number(self, attr):
+        try:
+            return float(self.product_info.get(attr))
+        except Exception:
+            return False
+    
+    def is_number_compatible(self, attr):
+        if self.is_number(attr):
+            return int(self.product_info.get(attr, float('-inf'))) > cutoff
+        else:
+            return True
 
     def __repr__(self):
         return str(self.product_info)
@@ -105,7 +108,7 @@ class ProductOptimizer():
 
     def get_importance_parameters(self):
         return self.importance_features
-
+    
     def utility_of_product(self, product):
         series = []
         for _, customer in self.df.iterrows():
@@ -124,6 +127,8 @@ class ProductOptimizer():
 
         return product_utility
 
+    
+    # @timer
     def compute_probability(self):
         for i in range(3):
             self.df[f'exp U{i+1}'] = np.exp(C*self.df[f'U{i+1}'])
@@ -134,11 +139,75 @@ class ProductOptimizer():
             self.df[f'Prob{i+1}'] = self.df[f'exp U{i+1}'] / self.df[f'Total Exp']
         
 
+    # @timer
     def compute_average_probability(self):
         result = []
         for i in range(3):
             result.append(self.df[f'Prob{i+1}'].mean())
         return result
+    
+    def get_sorted_importance_parameters_for_customer(self, customer):
+        rows = customer.loc[self.importance_features].sort_values(ascending=False)
+        rows_dict = rows.to_dict()
+        return sorted(rows_dict, key=lambda k: (rows_dict[k], random.random(), k), reverse=True)
+
+    def cutoffs_with_eba_per_customer(self, customer, products, indx = None):
+        sorted_imp = self.get_sorted_importance_parameters_for_customer(customer)
+
+        remaining_products = products
+
+        for imp in sorted_imp:
+            attr = self.imp_mapper.get(imp)
+
+            columns = [col for col in self.df.columns if col.startswith(f'p{attr}')]
+            filtered_cols = set([pref for pref in columns if customer[pref] > 2.5])
+
+            _products = [
+                product for product in remaining_products
+                if f'p{attr}{product.get_param(attr)}' in filtered_cols
+            ]
+
+            if len(_products) == 1:
+                return _products[0]
+        
+            if not _products:
+                return remaining_products[random.randrange(len(remaining_products)-1)]
+
+            remaining_products = _products
+        
+        random_index = random.randrange(0, len(remaining_products)-1)
+        return remaining_products[random_index] if indx is None else\
+            remaining_products[random_index].index
+    
+    def iterate_for_randomness(self, customer, products):
+        result = []
+        iterations = 100
+        
+        func = partial(self.cutoffs_with_eba_per_customer, customer, products)
+        with Pool(5) as p:
+            result=p.map(
+                func,
+                range(iterations)
+            )
+
+        # for _ in range(iterations):
+        #     product = self.cutoffs_with_eba_per_customer(customer, products)
+        #     result.append(product.index)
+        
+            distributions = Counter(result)
+            distributions = {f'P:{k}': v/iterations for k, v in distributions.items()}
+
+            return distributions
+        
+    def cutoffs_with_eba(self, products):
+        self.eba_df = pd.DataFrame(columns = [f'P:{i+1}' for i in range(3)])
+        for _, customer in self.df.iterrows():
+            distributions = self.iterate_for_randomness(customer, products)
+            self.eba_df = self.eba_df.append(distributions, ignore_index=True)
+
+        self.eba_df.fillna(0, inplace=True)
+        
+        return self.eba_df.mean().values
 
 
 def compute_expected_profit(market_shares, products):
@@ -148,7 +217,6 @@ def optimizer(products):
     obj = ProductOptimizer()
 
     for product in products:
-        # print(product.cost)
         obj.utility_of_product(product)
 
     obj.compute_probability()
@@ -163,17 +231,17 @@ def optimizer(products):
     }
 
 
-from multiprocessing import Pool
-from functools import partial
 
 def multi_process_handle(products, row):
     _, record = row
+
     prod = Product(record.values, 2, True)
     task = optimizer(products + [prod])
     
     return task
 
 
+# @timer
 def fast_get_all_product_shares():
     products = load_products()
     products.pop()
@@ -191,7 +259,7 @@ def fast_get_all_product_shares():
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     
-    print(products_df.head())
+    # print(products_df.head())
     return products_df
 
 
@@ -212,15 +280,12 @@ def get_all_product_shares():
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     
-    print(products_df.head())
+    # print(products_df.head())
     return products_df
 
 def main_1():
     products = load_products()
     print(optimizer(products))
-
-import matplotlib.pyplot as plt 
-import seaborn as sns
 
 def scatter_text(x, y, text_column, data):
     # Create the scatter plot
@@ -234,15 +299,51 @@ def scatter_text(x, y, text_column, data):
     return p1
 
 def main_2(fast=False):
-    # time1 = time.time()
     if fast:
         r1 = fast_get_all_product_shares()
-        scatter_text(x="Market Shares", y="Expected Profit / customer",\
-            text_column="index", data=r1)
-        plt.show()
-
     else:
-        get_all_product_shares()
+        r1 = get_all_product_shares()
 
-    # time2 = time.time()
-    # print(time2 - time1)
+    scatter_text(x="Market Shares", y="Expected Profit / customer",\
+        text_column="index", data=r1)
+    plt.show()
+
+
+def optimizer_by_elim(products):
+    obj = ProductOptimizer()
+    market_shares = obj.cutoffs_with_eba(products)
+
+    return {
+        'expected_profit': compute_expected_profit(market_shares, products),
+        'market_share': market_shares[-1]
+    }
+
+
+def get_all_product_shares_using_elim():
+    products = load_products()
+    products.pop()
+
+    products_df = load_products_from_csv()
+    record_results = []
+
+    for _, record in products_df.iterrows():
+        print('Iteration: ', _)
+        prod = Product(record.values, 2, True)
+        task = optimizer_by_elim(products + [prod])
+
+        record_results.append(task)
+    
+    products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
+    products_df['Market Shares'] = [r.get('market_share') for r in record_results]
+    
+    print(products_df.head())
+    return products_df
+
+
+def main_3():
+    r1 = get_all_product_shares_using_elim()
+    scatter_text(x="Market Shares", y="Expected Profit / customer",\
+            text_column="index", data=r1)
+    plt.show()
+    # products = load_products()
+    # print(optimizer_by_elim(products))
