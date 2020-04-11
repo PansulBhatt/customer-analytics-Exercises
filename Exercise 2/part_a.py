@@ -77,6 +77,7 @@ def load_products():
         result.append(obj)
     return result
 
+
 def load_products_from_csv():
     df = pd.read_csv('products.csv', names = ['index'] + product_map_list,\
         header=None, index_col='index')
@@ -91,12 +92,15 @@ def load_products_from_csv():
     
     return df
 
+
+mugs_data = pd.read_excel('mugs-preference-parameters-full.xlsx', index_col='Cust')
+
 class ProductOptimizer():
     def __init__(self):
         self.get_data()
 
     def get_data(self):
-        df = pd.read_excel('mugs-preference-parameters-full.xlsx', index_col='Cust')
+        df = mugs_data.copy(deep=True)
         df.rename(columns=lambda x: x.strip(), inplace=True)
         self.importance_features = [col for col in df if col.startswith('I')]
         self.product_features = [col for col in df if not col.startswith('I')]
@@ -122,6 +126,8 @@ class ProductOptimizer():
         for importance_feature in self.importance_features:
             importance_factor = customer[importance_feature]
             pr_key = self.imp_mapper[importance_feature]
+
+
             col_key = f'p{pr_key}{product.get_param(pr_key)}'
             product_utility += customer[col_key]*importance_factor
 
@@ -149,7 +155,7 @@ class ProductOptimizer():
     def get_sorted_importance_parameters_for_customer(self, customer):
         rows = customer.loc[self.importance_features].sort_values(ascending=False)
         rows_dict = rows.to_dict()
-        return sorted(rows_dict, key=lambda k: (rows_dict[k], random.random(), k), reverse=True)
+        return sorted(rows_dict, key=lambda k: (rows_dict[k], k), reverse=True)
 
     def cutoffs_with_eba_per_customer(self, customer, products, indx = None):
         sorted_imp = self.get_sorted_importance_parameters_for_customer(customer)
@@ -168,37 +174,41 @@ class ProductOptimizer():
             ]
 
             if len(_products) == 1:
-                return _products[0]
+                return 1, _products[0]
         
             if not _products:
-                return remaining_products[random.randrange(len(remaining_products)-1)]
+                random_index = int(random.random() * len(remaining_products))
+                return len(remaining_products), remaining_products[random_index]
 
             remaining_products = _products
         
-        random_index = random.randrange(0, len(remaining_products)-1)
-        return remaining_products[random_index] if indx is None else\
-            remaining_products[random_index].index
+        random_index = int(random.random() * len(remaining_products))
+        return len(remaining_products), (remaining_products[random_index] if indx is None else\
+            remaining_products[random_index].index)
     
     def iterate_for_randomness(self, customer, products):
         result = []
         iterations = 100
         
-        func = partial(self.cutoffs_with_eba_per_customer, customer, products)
-        with Pool(5) as p:
-            result=p.map(
-                func,
-                range(iterations)
-            )
+        # func = partial(self.cutoffs_with_eba_per_customer, customer, products)
+        # with Pool(5) as p:
+        #     result=p.map(
+        #         func,
+        #         range(iterations)
+        #     )
 
-        # for _ in range(iterations):
-        #     product = self.cutoffs_with_eba_per_customer(customer, products)
-        #     result.append(product.index)
+        for _ in range(iterations):
+            get_len, product = self.cutoffs_with_eba_per_customer(customer, products)                
+            result.append(product.index)
+            if get_len == 1:
+                break
         
-            distributions = Counter(result)
-            distributions = {f'P:{k}': v/iterations for k, v in distributions.items()}
+        distributions = Counter(result)
+        distributions = {f'P:{k}': v/iterations for k, v in distributions.items()}
 
-            return distributions
+        return distributions
         
+    # @timer
     def cutoffs_with_eba(self, products):
         self.eba_df = pd.DataFrame(columns = [f'P:{i+1}' for i in range(3)])
         for _, customer in self.df.iterrows():
@@ -211,8 +221,9 @@ class ProductOptimizer():
 
 
 def compute_expected_profit(market_shares, products):
-    return market_shares[-1]*products[-1].cost
+    return market_shares[-1]*(float(products[-1].price) - products[-1].cost)
 
+# @timer
 def optimizer(products):
     obj = ProductOptimizer()
 
@@ -221,6 +232,8 @@ def optimizer(products):
 
     obj.compute_probability()
     market_shares = obj.compute_average_probability()
+
+    # print(obj.df)
 
     # for share, product in zip(market_shares, products):
     #     print(share, product.cost, share*product.cost)
@@ -239,6 +252,7 @@ def multi_process_handle(products, row):
     task = optimizer(products + [prod])
     
     return task
+
 
 
 # @timer
@@ -301,16 +315,21 @@ def scatter_text(x, y, text_column, data):
 def main_2(fast=False):
     if fast:
         r1 = fast_get_all_product_shares()
+
+        scatter_text(x="Market Shares", y="Expected Profit / customer",\
+            text_column="index", data=r1)
+        plt.show()
     else:
         r1 = get_all_product_shares()
+        print('done with this')
+        print(r1)
 
-    scatter_text(x="Market Shares", y="Expected Profit / customer",\
-        text_column="index", data=r1)
-    plt.show()
+        scatter_text(x="Market Shares", y="Expected Profit / customer",\
+            text_column="index", data=r1)
+        plt.show()
 
 
-def optimizer_by_elim(products):
-    obj = ProductOptimizer()
+def optimizer_by_elim(products, obj):
     market_shares = obj.cutoffs_with_eba(products)
 
     return {
@@ -318,20 +337,48 @@ def optimizer_by_elim(products):
         'market_share': market_shares[-1]
     }
 
+# @timer
+def multi_process_handle_elim(products, obj, row):
+    _, record = row
+    print('Iteration', _)
+
+    prod = Product(record.values, 2, True)
+    task = optimizer_by_elim(products + [prod], obj)
+    
+    return task
 
 def get_all_product_shares_using_elim():
     products = load_products()
     products.pop()
 
+    obj = ProductOptimizer()
+
     products_df = load_products_from_csv()
     record_results = []
+    
+    func = partial(multi_process_handle_elim, products, obj)
+    
+    with Pool(4) as p:
+        record_results=p.map(
+            func,
+            products_df.iterrows()
+        )
 
-    for _, record in products_df.iterrows():
-        print('Iteration: ', _)
-        prod = Product(record.values, 2, True)
-        task = optimizer_by_elim(products + [prod])
 
-        record_results.append(task)
+    # p = Pool(5)
+    # func = partial(multi_process_handle_elim, products)
+    # 
+    # record_results=p.map(
+    #     func,
+    #     products_df.iterrows()
+    # )
+
+    # for _, record in products_df.iterrows():
+    #     print('Iteration: ', _)
+    #     prod = Product(record.values, 2, True)
+    #     task = optimizer_by_elim(products + [prod])
+
+    #     record_results.append(task)
     
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
@@ -342,8 +389,13 @@ def get_all_product_shares_using_elim():
 
 def main_3():
     r1 = get_all_product_shares_using_elim()
+    print(len(r1))
     scatter_text(x="Market Shares", y="Expected Profit / customer",\
             text_column="index", data=r1)
     plt.show()
     # products = load_products()
     # print(optimizer_by_elim(products))
+
+
+
+
