@@ -28,17 +28,14 @@ ratings = [i+1 for i in range(ratings_range)]
 # products are all permutations of those attribute.
 a_by_p = [p for p in product(ratings, repeat=ratings_range)]
 a_by_p = list(zip(*reversed(a_by_p)))
-# print(len(a_by_p))
 
 importance = random.sample(range(1, 100), ratings_range)
 # Make sure its sums to 100
 _sum = sum(importance)
 attr_importance = [round((i/_sum)*100, 2) for i in importance]
-# print(attr_importance)
 
 cutoff = random.sample(range(ratings_range), ratings_range)
 cutoff = list(map(int, cutoff))
-# print(cutoff)
 
 def len_mapper(length):
     mapper_fn = {
