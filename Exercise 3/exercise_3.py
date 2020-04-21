@@ -59,12 +59,8 @@ for i, product in enumerate(PRODUCTS):
 sum_of_descriptors = cluster_analysis_df.sum().to_dict()
 mean_for_descriptors = cluster_analysis_df.mean(axis=0).to_dict()
 
-print(mean_for_descriptors)
 
 def log_lift_fn(x):
-    if x.name == 'gradschl':
-        print(x.name, mean_for_descriptors[x.name], '\n',  x)
-        print(np.log(x / mean_for_descriptors[x.name]))
     return np.log10(x / mean_for_descriptors[x.name])
 
 def part_1():
