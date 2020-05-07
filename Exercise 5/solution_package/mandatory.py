@@ -1,22 +1,16 @@
 import pandas as pd 
 import numpy as np
-import pprint
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit, minimize_scalar, minimize, LinearConstraint, Bounds
-
-
-p = pprint.PrettyPrinter(depth=6)
-
-cons_df = pd.read_excel('dataset.xlsx', index_col=0, sheet_name='Sheet1')  
-m_df = pd.read_excel('dataset.xlsx', index_col=0, sheet_name='Sheet2')  
-
-print(m_df)
+import os
+print(os.getcwd())
+from . import cons_df, m_df, p
 
 proxy_for_infinity = 10
 SALESFORCE_COST_PER_PERSON = 0.057
 
-
 X = [0, 0.5, 1.0, 1.5, proxy_for_infinity]
+
 
 def ad_budg_eq(x, _min, _max, c, d):
     return _min + (_max - _min) * (x**c) / (d + x**c)
@@ -30,14 +24,12 @@ def question_1():
         )
         result[col] = popt
 
-    # p.pprint(result)
     return result
 
-max_range = 10_000_000
+
+q_res = question_1()
 
 def question_2():
-    q_res = question_1()
-
     result = {}
 
     for i, col in enumerate(cons_df):
@@ -45,7 +37,6 @@ def question_2():
 
         def scaler_fn(x):
             x = x[0]
-            # print(x, x == np.inf)
             relative_sf = x/(m_df[col]['Current/Original Salesforce'])
             response = _min + (_max - _min) * (relative_sf**c) / (d + relative_sf**c)
 
@@ -54,11 +45,11 @@ def question_2():
 
             return -new_profit
 
-        # res = minimize_scalar(scaler_fn, bounds=(0, np.inf), method='bounded')
-        # print('\n', res)
+        # res = minimize_scalar(scaler_fn, bounds=(0, max_range), method='bounded')
+        # print('\n', res.x)
+        # result[col] = res.x
+        # continue
 
-        # return
-        print(i)
         lower_bound = 0
         # n_drugs = 8
         # total_salesforce_size = 700
@@ -68,14 +59,36 @@ def question_2():
         res = minimize(scaler_fn, 100, method='trust-constr',\
             bounds=bounds_object, options={'verbose': 1})
 
-        print(res.x[0])
-        result = {col: res.x[0]}
-        # return
+        # print(res.x[0])
+        result[col] = res.x[0]
+    
+    p.pprint(result)
 
-        # result = [scaler_fn(i) for i in range(0, 1_000)]
-        # plt.plot(result)
-        # plt.show()
 
-        # return
 
+def negative_profit(x):
+    new_profit = 0
+    for i, col in enumerate(cons_df):
+        _min, _max, c, d = q_res[col]
+        el = x[i]
+        relative_sf = el/(m_df[col]['Current/Original Salesforce'])
+        response = _min + (_max - _min) * (relative_sf**c) / (d + relative_sf**c)
+        new_profit += response * m_df[col]['Current/Original Revenue'] -\
+            (el*SALESFORCE_COST_PER_PERSON)
+        
+    return -new_profit
+
+def question_3():
+    n_drugs = 8
+    total_salesforce_size = 5000
+    lower_bound = 0
+    x0 = np.ones(n_drugs)*total_salesforce_size/n_drugs
+    sum_constraint_object = LinearConstraint(np.ones((1, n_drugs)), lower_bound, total_salesforce_size)
+    bounds_object = Bounds(lower_bound, np.inf)
+    optimizer_output = minimize(negative_profit, x0, method='trust-constr',\
+            bounds=bounds_object,
+            constraints=sum_constraint_object
+            )
+
+    print(optimizer_output)
 
