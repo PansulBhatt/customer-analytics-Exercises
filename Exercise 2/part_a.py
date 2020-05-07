@@ -5,12 +5,15 @@ import pandas as pd
 import matplotlib.pyplot as plt 
 import seaborn as sns
 from multiprocessing import Pool
-from functools import partial
+from functools import partial, lru_cache
 from collections import namedtuple, Counter
-from utils import timer
+from utils import timer, listToTuple
 from products import Product
 from compute import ProductOptimizer
 from constants import PRICING, PRODUCTS, CONTAINMENT_MAP, PRODUCT_MAP_LIST, C
+import joblib
+mem = joblib.Memory(cachedir='/cache')
+
 
 # Making certain values global so I don't have to keep refetching values
 MyProduct = namedtuple('MyProduct', PRODUCT_MAP_LIST)
@@ -83,8 +86,6 @@ def optimizer(products: list):
     # print(obj.df['pBrC'].describe())
     # print(obj.df['pBrA'].describe())
 
-    # print(obj.df)
-
     # for share, product in zip(market_shares, products):
     #     print(share, product.cost, share*product.cost)
 
@@ -140,6 +141,7 @@ def fast_get_all_product_shares():
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     products_df['Cost'] = [r.get('cost') for r in record_results]
+    products_df['Margin'] = products_df['Pr'].astype(float) - products_df['Cost']
     
     # print(products_df.head())
     return products_df
@@ -162,10 +164,14 @@ def get_all_product_shares():
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     products_df['Cost'] = [r.get('cost') for r in record_results]
+    products_df['Margin'] = products_df['Pr'].astype(float) - products_df['Cost']
     
     # print(products_df.head())
     return products_df
 
+
+@timer
+@mem.cache
 def optimizer_by_elim(products, obj):
     """
     Optimize function which executes eliminations
@@ -174,7 +180,8 @@ def optimizer_by_elim(products, obj):
 
     return {
         'expected_profit': compute_expected_profit(market_shares, products),
-        'market_share': market_shares[-1]
+        'market_share': market_shares[-1],
+        'cost': products[-1].cost
     }
 
 # @timer
@@ -213,25 +220,29 @@ def get_all_product_shares_using_elim():
     func = partial(multi_process_handle_elim, products, obj)
     
     # Execute pool
-    with Pool(4) as p:
+    with Pool(16) as p:
         record_results=p.map(
             func,
             products_df.iterrows()
         )
     
+    # print(obj.df)
+    # print(record_results)
+    
     # Compute the required data from the recorded results
     products_df['Expected Profit / customer'] = [r.get('expected_profit') for r in record_results]
     products_df['Market Shares'] = [r.get('market_share') for r in record_results]
     products_df['Cost'] = [r.get('cost') for r in record_results]
+    products_df['Margin'] = products_df['Pr'].astype(float) - products_df['Cost']
     
-    print(products_df.head())
+    # print(products_df.head())
     return products_df
 
 
-def scatter_text(x, y, text_column, data):
+def scatter_text(x, y, text_column, data, hue='Cn'):
     # Create the scatter plot
     print('comes here')
-    p1 = sns.scatterplot(x, y, data=data, size = 8, legend=False, hue='Cn')
+    p1 = sns.scatterplot(x, y, data=data, size = 8, legend=False, hue=hue)
     # Add text besides each point
     for line, _ in data.iterrows():
          p1.text(data[x][line], data[y][line]+0.03, 
@@ -271,6 +282,7 @@ def main_2(fast=False):
             text_column="index", data=r1)
         plt.show()
 
+@timer
 def main_3():
     """
     elimination-by-aspects (EBA)

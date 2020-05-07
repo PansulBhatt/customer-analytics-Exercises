@@ -1,8 +1,13 @@
 import random
 import numpy as np
 import pandas as pd
+from functools import lru_cache
+from utils import timer, listToTuple
 from collections import Counter
 from constants import PRICING, PRODUCTS, CONTAINMENT_MAP, PRODUCT_MAP_LIST, C, CUTOFF
+import joblib
+mem = joblib.Memory(cachedir='/cache', verbose=1)
+
 
 mugs_data = pd.read_excel('mugs-preference-parameters-full.xlsx', index_col='Cust')
 
@@ -13,8 +18,9 @@ class ProductOptimizer():
 
     # TODO: Find a way to integrate the product class in this using abstraction.
     """
-    def __init__(self):
+    def __init__(self, number_of_products=3):
         # On initialization we fetch the required values and push them to a df
+        self.number_of_products = number_of_products
         self.get_data()
 
     def get_data(self):
@@ -78,12 +84,13 @@ class ProductOptimizer():
         
         P(purchase) = exp(c*up) / (exp(c*up) + exp(c*ui) + ...)
         """
-        for i in range(3):
+        N = self.number_of_products
+        for i in range(N):
             self.df[f'exp U{i+1}'] = np.exp(C*self.df[f'U{i+1}'])
         
-        self.df[f'Total Exp'] = self.df.iloc[:, -3:].sum(axis=1)
+        self.df[f'Total Exp'] = self.df.iloc[:, -N:].sum(axis=1)
 
-        for i in range(3):
+        for i in range(N):
             self.df[f'Prob{i+1}'] = self.df[f'exp U{i+1}'] / self.df[f'Total Exp']
         
 
@@ -91,16 +98,19 @@ class ProductOptimizer():
         """
         Function to compute average probability across
         """
+        N = self.number_of_products
         result = []
-        for i in range(3):
+        for i in range(N):
             result.append(self.df[f'Prob{i+1}'].mean())
         
         return result
     
+
     def get_sorted_importance_parameters_for_customer(self, customer):
         rows = customer.loc[self.importance_features].sort_values(ascending=False)
         rows_dict = rows.to_dict()
         return sorted(rows_dict, key=lambda k: (rows_dict[k], random.random(), k), reverse=True)
+
 
     def cutoffs_with_eba_per_customer(self, customer, products, indx = None):
         """
@@ -131,7 +141,7 @@ class ProductOptimizer():
             columns = [col for col in self.df.columns if col.startswith(f'p{attr}')]
 
             # Maintain a set of filtered columns which are greater than cutoff
-            filtered_cols = set([pref for pref in columns if customer[pref] > CUTOFF])
+            filtered_cols = set([pref for pref in columns if customer[pref] >= CUTOFF])
 
             # Map products with filtered columns
             # and save it to a temporary array. This will allow
@@ -176,22 +186,24 @@ class ProductOptimizer():
                 break
         
         distributions = Counter(result)
-        distributions = {f'P:{k}': v/iterations for k, v in distributions.items()}
+        divide_by = iterations if get_len != 1 else 1
+        distributions = {f'P:{k}': v/divide_by for k, v in distributions.items()}
 
         return distributions
         
-    # @timer
     def cutoffs_with_eba(self, products):
         """
         Compute the cutoffs using EBA
         """
         # Set eba_df which can contain the required information about the data
-        self.eba_df = pd.DataFrame(columns = [f'P:{i+1}' for i in range(3)])
+        self.eba_df = pd.DataFrame(columns = [f'P:{i+1}' for i in range(self.number_of_products)])
 
         # Iterate through all the customers and append based on their preferences
         for _, customer in self.df.iterrows():
             distributions = self.iterate_for_randomness(customer, products)
             self.eba_df = self.eba_df.append(distributions, ignore_index=True)
+        
+        # print(self.eba_df)
 
         # Remove all NaN with 0 for mean.
         self.eba_df.fillna(0, inplace=True)

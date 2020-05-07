@@ -16,11 +16,21 @@ For extra Extra Credit:
 Write the function without using any "if" statement and also without using explicit loops. 
 Your solution needs to use the same policy as ties and null sets as given in Q4.
 """
+import time
 import random
 import collections
+import numpy as np
 import pandas as pd
 from itertools import product 
-from functools import reduce
+from functools import reduce, partial
+import random
+import matplotlib.pyplot as plt 
+import seaborn as sns
+from multiprocessing import Pool
+from products import Product
+from compute import ProductOptimizer
+from constants import PRICING, PRODUCTS, CONTAINMENT_MAP, PRODUCT_MAP_LIST, C
+from part_a import load_products, load_products_from_csv, scatter_text
 
 ratings_range = 7
 ratings = [i+1 for i in range(ratings_range)]
@@ -183,7 +193,117 @@ def test_option_3():
     print(stats)
 
 
+def compute_expected_profit(market_shares: list, products: list):
+    """
+    Computes expected profit by checking the last values (as we append the comparison product
+    at the end)
+    """
+    return (
+        market_shares[-2]*(float(products[-2].price) - products[-2].cost),
+        market_shares[-1]*(float(products[-1].price) - products[-1].cost)
+    )
+
+
+def optimizer(products: list):
+    obj = ProductOptimizer(4)
+
+    for product in products:
+        obj.utility_of_product(product)
+
+    obj.compute_probability()
+    market_shares = obj.compute_average_probability()
+
+    return {
+        'expected_profit': compute_expected_profit(market_shares, products),
+        'market_share': market_shares[:-2],
+        'cost': [p.cost for p in products[:-2]]
+    }
+
+
+def multi_process_handle(products, row):
+    _, record = row
+    print('Iteration :', _)
+    values_list = record.values.tolist()
+    first = values_list[:len(PRODUCT_MAP_LIST)]
+    second = values_list[len(PRODUCT_MAP_LIST):]
+    f_prod = Product(first, 2, True)
+    s_prod = Product(second, 3, True)
+    # print(prod)
+    task = optimizer(products + [f_prod, s_prod])
+    return task
+
+
+def df_crossjoin(df1, df2, **kwargs):
+    df1['_tmpkey'] = 1
+    df2['_tmpkey'] = 1
+
+    res = pd.merge(df1, df2, on='_tmpkey', **kwargs).drop('_tmpkey', axis=1)
+    res.index = pd.MultiIndex.from_product((df1.index, df2.index))
+
+    df1.drop('_tmpkey', axis=1, inplace=True)
+    df2.drop('_tmpkey', axis=1, inplace=True)
+
+    return res
+
+
+def update_records(products_df, record_results, number=0):
+    suffix = '_x' if number == 0 else '_y'
+    products_df[f'Expected Profit/customer{suffix}'] =\
+                    [r.get('expected_profit')[number] for r in record_results]
+    products_df[f'Market Shares{suffix}'] = [r.get('market_share')[number] for r in record_results]
+    products_df[f'Cost{suffix}'] = [r.get('cost')[number] for r in record_results]
+    products_df[f'Margin{suffix}'] = products_df[f'Pr{suffix}'].astype(float) - products_df[f'Cost{suffix}']
+
+def fast_get_all_product_shares():
+    """
+    Multiprocessing way of handling analysis.
+    """
+    # Load required data
+    products = load_products()
+    products.pop()
+
+    products_df1 = load_products_from_csv()
+    products_df2 = load_products_from_csv()
+
+    products_df = df_crossjoin(products_df1, products_df2)
+
+    record_results = []
+
+    # Setup our pool of processes
+    p = Pool(5)
+    
+    # Setup function to take in extra parameters
+    func = partial(multi_process_handle, products)
+
+    # Execute pool map of products_df
+    record_results=p.map(
+        func,
+        products_df.iterrows()
+        )
+    
+    # # Compute expected profit
+    update_records(products_df, record_results, 0)
+    update_records(products_df, record_results, 1)
+
+    products_df[f'Total Profit / Customer'] = products_df[f'Expected Profit/customer_x'] + \
+        products_df[f'Expected Profit/customer_y']
+
+    products_df[f'Total Market Shares'] = products_df[f'Market Shares_x'] + \
+        products_df[f'Market Shares_y']
+    
+    # # print(products_df.head())
+    return products_df
+
+
+
+def option_2():
+    r1 = fast_get_all_product_shares()
+    scatter_text(x="Total Market Shares", y="Total Profit / Customer",\
+        text_column="index", data=r1, hue='Cn_x')
+    plt.show()
+
 if __name__ == '__main__':
+    option_2()
     test_option_3()
     # optional_3(a_by_p, importance, cutoff)
 

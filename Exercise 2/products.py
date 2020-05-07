@@ -40,3 +40,6 @@ class Product():
 
     def __repr__(self):
         return str(self.product_info)
+    
+    def __hash__(self):
+        return self.index
