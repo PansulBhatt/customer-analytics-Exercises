@@ -1,44 +1,48 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 import numpy as np
+import random
+import collections
 from scipy.optimize import curve_fit, minimize_scalar
 from . import cons_df, m_df
 from .mandatory import question_1
-import random
 
 np.random.seed(4100142)
 SALESFORCE_COST_PER_PERSON = 0.057
 
-def range_util(start, stop, count):
-    step = (stop - start) / float(count)
-    return [start + i * step for i in range(count)]
 
-def calc_util(x, vol):
-    return x - 0.5*2*vol
+def utility_calc(x, A):
+    return x['mean'] - 0.5*A*x['stddev']
 
 def optional_part_1():
-    range_list = range_util(100, 441, 11)
+    range_list = np.linspace(100, 440, 11)
     original_sf = m_df['Naprosyn']['Current/Original Salesforce']
     original_revenue = m_df['Naprosyn']['Current/Original Revenue']
-    relative_sfs = [i/original_sf
-        for i in range_list
-    ]
-    mn, *_, mx = cons_df['Naprosyn'] # calculates min and max
-    print(mn, mx)
 
-    result = question_1()
-    mn, mx, c, d = result['Naprosyn']
+    cov_result = question_1(True)
+    opt = cov_result['Naprosyn']['popt']
+    cov = cov_result['Naprosyn']['pcov']
 
-    def naprosyn_adbudg_util(x):
+    def naprosyn_adbudg_util(x, params):
+        mn, mx, c, d = params
         response = mn + (mx - mn) * (x**c) / (d + x**c)
         new_revenue = response*original_revenue
         new_profit = new_revenue*0.7 -  x*SALESFORCE_COST_PER_PERSON
         return new_profit
 
-    results = (list(map(naprosyn_adbudg_util, relative_sfs)))
-    print(results)
 
-    theta_hat, varcov_theta_hat = curve_fit(calc_util, range_list, results, p0=[0.5099])
+    result = collections.defaultdict(list)
+
+    for X in range_list:
+        np_result = np.array(np.random.multivariate_normal(opt, cov, 500))
+        x_res = np.array(list(map(lambda params: naprosyn_adbudg_util(X, params), np_result)))
+        result['salesforce'].append(X)
+        result['mean'].append(np.mean(x_res))
+        result['median'].append(np.median(x_res))
+        result['stddev'].append(np.std(x_res))
     
-    np_result = np.array(np.random.multivariate_normal(theta_hat, varcov_theta_hat, 500))
-    print(np_result.std())
-    
+    df = pd.DataFrame(result)
+    for i in range(1, 6):
+        df[f'U{i}'] = df.apply(lambda x: utility_calc(x.to_dict(), i), axis=1)
+
+    print(df)
