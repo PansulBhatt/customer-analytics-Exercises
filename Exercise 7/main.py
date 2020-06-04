@@ -62,8 +62,10 @@ def exercise_b():
 
         results = []
 
+
         for x0 in range(0, 100, 10):
-            res = minimize(compute_fn, x0, method='trust-constr')
+            res = minimize(compute_fn, x0, method='trust-constr',
+                            hess = lambda x: np.zeros(len(x)))
             results.append(res)
         
         best_idx = np.argmax(list(map(lambda x: -x.fun[0], results)))
@@ -105,14 +107,16 @@ def exercise_c():
     )
 
     expenditures = []
+    profit = []
     for i, row in ltv_df.iterrows():
         a, b = df_results[row['keyword']]
         expenditures.append(res.x[i] * number_of_clicks(res.x[i], a, b))
+        profit.append(number_of_clicks(res.x[i], a, b) * (row['ltv'] * row['conv.rate'] - res.x[i]))
 
-    res_df_c = pd.DataFrame({'bid': res.x, 'expenditure': expenditures},
+    res_df_c = pd.DataFrame({'bid': res.x, 'expenditure': expenditures, 'profit': profit},
                             index = keyword_list)
 
-    print("\033[34m", "Profit: ", -res.fun, "\033[0m") 
+    print("\033[34m", "Total Profit: ", -res.fun, "\033[0m") 
     print(res_df_c)
     return res_df_c
 
