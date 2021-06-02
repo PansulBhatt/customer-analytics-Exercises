@@ -247,7 +247,7 @@ tweepy==3.8.0
 tweet-preprocessor==0.5.0
 ujson==1.35
 unicodecsv==0.14.1
-urllib3==1.25.7
+urllib3==1.26.5
 virtualenv==16.7.9
 virtualenv-clone==0.5.3
 virtualenvwrapper==4.8.4
