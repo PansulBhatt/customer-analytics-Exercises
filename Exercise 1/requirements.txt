@@ -245,7 +245,7 @@ tqdm==4.40.2
 traitlets==4.3.3
 tweepy==3.8.0
 tweet-preprocessor==0.5.0
-ujson==1.35
+ujson==5.4.0
 unicodecsv==0.14.1
 urllib3==1.25.7
 virtualenv==16.7.9
